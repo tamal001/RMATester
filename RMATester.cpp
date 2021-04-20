@@ -2,8 +2,8 @@
 #include <cstring>
 #include <random>
 #include <chrono>
-#include <cassert>
 #include <unistd.h>
+#include <fstream>
 
 #define Times 100
 
@@ -75,7 +75,6 @@ int main(int argc, char **argv){
         int64_t valPO = PAMWithPositionOffset(data, index, count, low, low+100);
         end = chrono::high_resolution_clock::now();
         posOffTimerShort += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        //assert(valB == valPO);
     }
 
     cout << "Running "<<Times<<" long range (length 100000) queries." << endl;
@@ -98,7 +97,6 @@ int main(int argc, char **argv){
         int64_t valPO = PAMWithPositionOffset(data, index, count, low, low+100000);
         end = chrono::high_resolution_clock::now();
         posOffTimerLong += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        //assert(valB == valPO);
     }
 
     cout << "Running "<<Times<<" point lookup queries." << endl;
@@ -119,11 +117,20 @@ int main(int argc, char **argv){
         int64_t valPO = PAMWithPositionOffset(data, index, count, low, 0);
         end = chrono::high_resolution_clock::now();
         posOffTimerPoint += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        //assert(valB == valPO);
     }
     cout << "Average time for short range: PAM with Branching = "<<pamTimerShort<<", PAM with index offset ="<<posOffTimerShort<<endl;
     cout << "Average time for long range: PAM with Branching = "<<pamTimerLong<<", PAM with index offset ="<<posOffTimerLong<<endl;
     cout << "Average time for point lookup: PAM with Branching = "<<pamTimerPoint<<", PAM with index offset ="<<posOffTimerPoint<<endl;
+    ofstream myfile;
+    myfile.open ("result_short_range.csv", ios::out | ios::app);
+    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",P_Brnch,"<<pamTimerShort<<",P_Offst,"<<posOffTimerShort<<endl;
+    myfile.close();
+    myfile.open ("result_long_range.csv", ios::out | ios::app);
+    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",P_Brnch,"<<pamTimerLong<<",P_Offst,"<<posOffTimerLong<<endl;
+    myfile.close();
+    myfile.open ("result_lookup.csv", ios::out | ios::app);
+    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",P_Brnch,"<<pamTimerPoint<<",P_Offst,"<<posOffTimerPoint<<endl;
+    myfile.close();
     return 0;
 }
 
