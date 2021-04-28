@@ -6,16 +6,20 @@
 #include <fstream>
 
 #define Times 100
+#define DATASEGMENTSIZE 256
 
 using namespace std;
 
 int64_t nextData(int64_t, double);
 int64_t PAMWithBranching(int64_t *, int64_t, int64_t, int64_t);
+int64_t PAMWithDenseData(int64_t *, int64_t, int64_t, int64_t);
 int64_t PAMWithPositionOffset(int64_t *, int64_t *, int64_t, int64_t, int64_t);
 
 int main(int argc, char **argv){
     int64_t *data;
     int64_t *index;
+    uint64_t *bitIndex;
+    int64_t *data2;
     int64_t size = 0;
     double density = 0.0;
 
@@ -48,9 +52,31 @@ int main(int argc, char **argv){
 
     cout <<"Creating index offset for data." << endl;
     index = (int64_t *) malloc (sizeof(int64_t)*(count+1));
+    bitIndex = (uint64_t *) malloc (sizeof(uint64_t) * ceil((double)count/sizeof(uint64_t)));
+    memset(bitIndex, 0, sizeof(uint64_t) * ceil((double)count/sizeof(uint64_t)));
+    uint64_t bitind = 0;
     for(int64_t i=0, ind = 0; i<arraySize; i++){
-        if(data[i] > 0) index[ind++] = i;
+        bitIndex[bitind] = bitIndex[bitind] << 1;
+        if(data[i] > 0){
+            index[ind++] = i;
+            bitIndex[bitind] = bitIndex[bitind] | 1;
+        }
+        if((i+1) % 64 == 0) bitind++;
     }
+
+    cout<< "creating dense array for Bconz";
+    data2 = (int64_t *)malloc(sizeof(int64_t)*arraySize);
+    memset(data2, 0, sizeof(sizeof(int64_t)*arraySize));
+    int64_t segments = ceil((double)arraySize/DATASEGMENTSIZE);
+    for(int64_t segNo=0; segNo < segments; segNo++){
+        int64_t start = segNo * DATASEGMENTSIZE;
+        int64_t limit = min(start + DATASEGMENTSIZE, arraySize);
+        for(int64_t i = start, j = start; i<limit; i++){
+            if(data[i] == 0) continue;
+            data2[j++]= data[i];
+        }
+    }
+
 
     cout << "Run queries now within range 1 and "<< current << endl;
 
@@ -65,7 +91,7 @@ int main(int argc, char **argv){
 
         //Run PAM with branching
         start = chrono::high_resolution_clock::now();
-        int64_t valB = PAMWithBranching(data, arraySize, low, low+100);
+        int64_t valB = PAMWithDenseData(data2, arraySize, low, low+100);
         end = chrono::high_resolution_clock::now();
         //cout <<"Vaue at end "<<end<<endl;
         pamTimerShort += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -88,7 +114,7 @@ int main(int argc, char **argv){
         //Run PAM with branching
         start = chrono::high_resolution_clock::now();
 
-        int64_t valB = PAMWithBranching(data, arraySize, low, low+100000);
+        int64_t valB = PAMWithDenseData(data2, arraySize, low, low+100000);
         end = chrono::high_resolution_clock::now();
         pamTimerLong += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
@@ -108,7 +134,7 @@ int main(int argc, char **argv){
 
         //Run PAM with branching
         start = chrono::high_resolution_clock::now();
-        int64_t valB = PAMWithBranching(data, arraySize, low, 0);
+        int64_t valB = PAMWithDenseData(data2, arraySize, low, 0);
         end = chrono::high_resolution_clock::now();
         pamTimerPoint += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
@@ -122,14 +148,14 @@ int main(int argc, char **argv){
     cout << "Average time for long range: PAM with Branching = "<<pamTimerLong<<", PAM with index offset ="<<posOffTimerLong<<endl;
     cout << "Average time for point lookup: PAM with Branching = "<<pamTimerPoint<<", PAM with index offset ="<<posOffTimerPoint<<endl;
     ofstream myfile;
-    myfile.open ("result_short_range.csv", ios::out | ios::app);
-    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",P_Brnch,"<<pamTimerShort<<",P_Offst,"<<posOffTimerShort<<endl;
+    myfile.open ("Boncz_short_range.csv", ios::out | ios::app);
+    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",P_Boncz,"<<pamTimerShort<<",P_Offst,"<<posOffTimerShort<<endl;
     myfile.close();
-    myfile.open ("result_long_range.csv", ios::out | ios::app);
-    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",P_Brnch,"<<pamTimerLong<<",P_Offst,"<<posOffTimerLong<<endl;
+    myfile.open ("Boncz_long_range.csv", ios::out | ios::app);
+    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",P_Boncz,"<<pamTimerLong<<",P_Offst,"<<posOffTimerLong<<endl;
     myfile.close();
-    myfile.open ("result_lookup.csv", ios::out | ios::app);
-    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",P_Brnch,"<<pamTimerPoint<<",P_Offst,"<<posOffTimerPoint<<endl;
+    myfile.open ("Boncz_lookup.csv", ios::out | ios::app);
+    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",P_Boncz,"<<pamTimerPoint<<",P_Offst,"<<posOffTimerPoint<<endl;
     myfile.close();
     return 0;
 }
@@ -205,6 +231,53 @@ int64_t PAMWithPositionOffset(int64_t *data, int64_t *index, int64_t end, int64_
     while(data[index[mid]] <= high){
         //cout << "Index "<<index[mid]<<" value"<<data[index[mid]] <<" Sum: "<< sum<< endl;
         sum += data[index[mid]];
+        mid++;
+    }
+    //cout << "finished with "<<sum<<endl;
+    return sum;
+}
+
+int64_t PAMWithDenseData(int64_t *data, int64_t end, int64_t low, int64_t high){
+    int64_t start = 0; end--;
+    int64_t mid;
+    //cout << "starting Branching with start "<<start<<" and end. "<<end<<"Searching for "<<low<<endl; 
+    while(start < end){
+        mid = (start + end) / 2;
+        if(data[mid] == 0){
+            int64_t changedMid = mid, offset = -1;
+            while(changedMid > start){
+                changedMid += offset;
+                if(data[changedMid]!=0) break;
+            }
+            if(changedMid == start){
+                if(data[start] >= low) {mid = start; break;}
+                changedMid = mid;
+                offset = 1;
+                while(changedMid < end){
+                    changedMid += offset;
+                    if(data[changedMid]!=0) break;
+                }
+                if(changedMid == end){
+                    mid = end; break;
+                }else mid = changedMid;
+            }else mid = changedMid;
+
+        }
+        if(data[mid] == low) break;
+        else if(data[mid] < low) start = mid + 1;
+        else end = mid - 1;
+    }
+    //cout << "mid value "<<data[mid]<<endl;
+    int64_t sum = 0;
+    while(data[mid]<low){
+        mid++;
+    }
+    if (high == 0) return data[mid]==low? low : 0;
+    while(data[mid] <= high){
+        if(data[mid] != 0) {
+            //cout << "Index "<<mid<<" value"<<data[mid] <<" Sum: "<< sum<< endl;
+            sum += data[mid];
+        }
         mid++;
     }
     //cout << "finished with "<<sum<<endl;
