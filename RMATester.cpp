@@ -19,11 +19,15 @@ typedef struct Record{
 int64_t nextData(int64_t, double);
 int64_t PMAWithBranching(int64_t *, int64_t, int64_t, int64_t);
 int64_t PMAWithDenseData(int64_t *, int64_t, record *, int64_t, int64_t, int64_t);
+int64_t PMAWithDenseData2(int64_t *, int64_t, record *, int64_t, int64_t, int64_t);
 int64_t PMAWithPositionOffset(int64_t *, int64_t *, int64_t, int64_t, int64_t);
 void create_next_element_offset();
+void create_non_zero_entries();
 int64_t PMAWithNextElementOffset(int64_t *, unsigned short *, int64_t, int64_t, int64_t);
+int64_t PMAWithNonZeroEntries(int64_t *, unsigned short *, int64_t, int64_t, int64_t);
 
 unsigned short NextElementOffset[65536][16];
+u_char *NonZeroEntries[65536];
 
 int main(int argc, char **argv){
     int64_t *data;
@@ -44,7 +48,7 @@ int main(int argc, char **argv){
 
     cout<< "Creating array of size "<< arraySize << " for "<< size << " elements with density "<< density<< endl;
     data = (int64_t *)malloc(sizeof(int64_t)*arraySize);
-    memset(data, 0, sizeof(sizeof(int64_t)*arraySize));
+    memset(data, 0, sizeof(data));
 
     cout<< "Pushing data in the array"<< endl;
     default_random_engine generator;
@@ -63,33 +67,35 @@ int main(int argc, char **argv){
     cout <<"Creating index offset for data." << endl;
     index = (int64_t *) malloc (sizeof(int64_t)*(count+1));
     //bitIndex = (uint64_t *) malloc (sizeof(uint64_t) * ceil((double)count/sizeof(uint64_t)));
-    uint64_t bitind = 0;
     for(int64_t i=0, ind = 0; i<arraySize; i++){
         if(data[i] > 0){
             index[ind++] = i;
         }
-        if((i+1) % 64 == 0) bitind++;
     }
 
     cout <<"Creating bitmap and next element offset for data." << endl;
     create_next_element_offset();
-    int ushortSize = sizeof(unsigned short);
+    int ushortSize = sizeof(unsigned short) * 8;
     int64_t NEOffset_size = ceil((double)arraySize / ushortSize);
-    NEOffset = (unsigned short *) malloc(ushortSize * NEOffset_size);
-    for(int i=0; i<NEOffset_size; i++){
-        int start = i * ushortSize;
-        int limit = min((int64_t)start+ushortSize, arraySize);
+    NEOffset = (unsigned short *) malloc(sizeof(unsigned short) * NEOffset_size);
+    for(int64_t i=0; i<NEOffset_size; i++){
+        int64_t start = i * ushortSize;
+        int64_t limit = min((int64_t)start+ushortSize, arraySize);
         unsigned short k = 0, l = 1;
-        for(int j=start; j<limit; j++){
-            if(data[j] != 0) k |= l;
+        //if(i == 2095059) cout <<"start: "<<start<<" limit: " <<limit << " arraySize: "<<arraySize<<" ushortsize: "<<ushortSize<<" ";
+        for(int64_t j=start; j<limit; j++){
+            if(data[j] != 0) k = k|l;
             l = l << 1;
         }
         NEOffset[i] = k;
     }
 
+    cout <<"Creating next nonzero element list for data." << endl;
+    create_non_zero_entries();
+
     cout<< "creating dense array for Bconz" << endl;
     data2 = (int64_t *)malloc(sizeof(int64_t)*arraySize);
-    memset(data2, 0, sizeof(sizeof(int64_t)*arraySize));
+    memset(data2, 0, sizeof(data2));
     int64_t segments = ceil((double)arraySize/DATASEGMENTSIZE);
     record *segRecord = new record[segments];
     for(int64_t segNo=0; segNo < segments; segNo++){
@@ -107,7 +113,7 @@ int main(int argc, char **argv){
 
     chrono::time_point<std::chrono::high_resolution_clock> start, end;
     cout << "Running "<<Times<<" short range (length 1000) queries." << endl;
-    int64_t pamTimerShort = 0, bitOffTimerShort = 0, posOffTimerShort = 0;
+    int64_t pamTimerShort = 0, bitOffTimerShort = 0, posOffTimerShort = 0, nzOffTimerShort = 0;
     for(int i = 0; i < Times; i++){
         //create range
         d = distribution(generator);
@@ -116,7 +122,7 @@ int main(int argc, char **argv){
 
         //Run PMA with branching
         start = chrono::high_resolution_clock::now();
-        int64_t valB = PMAWithDenseData(data2, arraySize, segRecord, segments, low, low+1000);
+        int64_t valB = PMAWithDenseData2(data2, arraySize, segRecord, segments, low, low+1000);
         end = chrono::high_resolution_clock::now();
         //cout <<"Vaue at end "<<end<<endl;
         pamTimerShort += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -126,21 +132,28 @@ int main(int argc, char **argv){
         int64_t valBO = PMAWithNextElementOffset(data, NEOffset, arraySize, low, low+1000);
         end = chrono::high_resolution_clock::now();
         bitOffTimerShort += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        //printf("value from NEO %ld, value from Dense Data: %ld\n",valPO, valB);
+        //printf("value from NEO %ld, value from Dense Data: %ld\n",valBO, valB);
         assert(valBO == valB);
 
-        //Run PAM with bitwise offset
+        //Run PMA with position offset
         start = chrono::high_resolution_clock::now();
         int64_t valPO = PMAWithPositionOffset(data, index, count, low, low+1000);
         end = chrono::high_resolution_clock::now();
         posOffTimerShort += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         //printf("value from NEO %ld, value from Dense Data: %ld, value from Position offset: %ld\n",valBO, valB, valPO);
         assert(valBO == valPO);
+
+        //Run PMA with Non-zero Entries
+        start = chrono::high_resolution_clock::now();
+        int64_t valNZO = PMAWithNonZeroEntries(data, NEOffset, arraySize, low, low+1000);
+        end = chrono::high_resolution_clock::now();
+        nzOffTimerShort += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        //printf("value from NEO %ld, value from Dense Data: %ld, value from Position offset: %ld, value from Nonzero offset %ld\n",valBO, valB, valPO, valNZO);
+        assert(valBO == valNZO);
     }
 
-    
     cout << "Running "<<Times<<" long range (length 100000) queries." << endl;
-    int64_t pamTimerLong = 0, posOffTimerLong = 0, bitOffTimerLong = 0;
+    int64_t pamTimerLong = 0, posOffTimerLong = 0, bitOffTimerLong = 0, nzOffTimerLong = 0;
     for(int i = 0; i < Times; i++){
         //create range
         d = distribution(generator);
@@ -150,7 +163,7 @@ int main(int argc, char **argv){
         //Run PAM with branching
         start = chrono::high_resolution_clock::now();
 
-        int64_t valB = PMAWithDenseData(data2, arraySize, segRecord, segments, low, low+100000);
+        int64_t valB = PMAWithDenseData2(data2, arraySize, segRecord, segments, low, low+100000);
         end = chrono::high_resolution_clock::now();
         pamTimerLong += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
@@ -159,7 +172,7 @@ int main(int argc, char **argv){
         int64_t valBO = PMAWithNextElementOffset(data, NEOffset, arraySize, low, low+100000);
         end = chrono::high_resolution_clock::now();
         bitOffTimerLong += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        //printf("value from NEO %ld, value from Dense Data: %ld\n",valPO, valB);
+        //printf("value from NEO %ld, value from Dense Data: %ld\n",valBO, valB);
         assert(valBO == valB);
 
         //Run PAM with Position offset
@@ -168,10 +181,17 @@ int main(int argc, char **argv){
         end = chrono::high_resolution_clock::now();
         posOffTimerLong += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         assert(valBO == valPO);
+
+        //Run PMA with Non-zero Entries
+        start = chrono::high_resolution_clock::now();
+        int64_t valNZO = PMAWithNonZeroEntries(data, NEOffset, arraySize, low, low+100000);
+        end = chrono::high_resolution_clock::now();
+        nzOffTimerLong += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        assert(valBO == valNZO);
     }
 
     cout << "Running "<<Times<<" point lookup queries." << endl;
-    int64_t pamTimerPoint = 0, posOffTimerPoint = 0, bitOffTimerPoint = 0;
+    int64_t pamTimerPoint = 0, posOffTimerPoint = 0, bitOffTimerPoint = 0, nzOffTimerPoint = 0;
     for(int i = 0; i < Times; i++){
         //create range
         d = distribution(generator);
@@ -179,7 +199,7 @@ int main(int argc, char **argv){
 
         //Run PMA with boncz
         start = chrono::high_resolution_clock::now();
-        int64_t valB = PMAWithDenseData(data2, arraySize, segRecord, segments, low, 0);
+        int64_t valB = PMAWithDenseData2(data2, arraySize, segRecord, segments, low, 0);
         end = chrono::high_resolution_clock::now();
         pamTimerPoint += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
@@ -188,7 +208,7 @@ int main(int argc, char **argv){
         int64_t valBO = PMAWithNextElementOffset(data, NEOffset, arraySize, low, 0);
         end = chrono::high_resolution_clock::now();
         bitOffTimerPoint += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        //printf("value from NEO %ld, value from Dense Data: %ld\n",valPO, valB);
+        //printf("value from NEO %ld, value from Dense Data: %ld\n",valBO, valB);
         assert(valBO == valB);
 
         //Run PMA with position offset
@@ -196,28 +216,37 @@ int main(int argc, char **argv){
         int64_t valPO = PMAWithPositionOffset(data, index, count, low, 0);
         end = chrono::high_resolution_clock::now();
         posOffTimerPoint += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        assert(valBO == valBO);
+        assert(valBO == valPO);
+
+        //Run PMA with Non-zero Entries
+        start = chrono::high_resolution_clock::now();
+        int64_t valNZO = PMAWithNonZeroEntries(data, NEOffset, arraySize, low, 0);
+        end = chrono::high_resolution_clock::now();
+        nzOffTimerPoint += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        //printf("value from NEO %ld, value from Dense Data: %ld, value from Position offset: %ld, value from Nonzero offset %ld\n",valBO, valB, valPO, valNZO);
+        assert(valBO == valNZO);
     }
     
-    cout << "Average time for short range: PMA with Dense Data (Boncz) = "<<pamTimerShort<<", PMA with Bitmap offset ="<<bitOffTimerShort<<", PMA with Position offset ="<<posOffTimerShort<<endl;
-    cout << "Average time for long range: PMA with Dense Data (Boncz) = "<<pamTimerLong<<", PMA with Bitmap offset ="<<bitOffTimerLong<<", PMA with Position offset ="<<posOffTimerLong<<endl;
-    cout << "Average time for point lookup: PMA with Dense Data (Boncz) = "<<pamTimerPoint<<", PMA with Bitmap offset ="<<bitOffTimerPoint<<", PMA with Position offset ="<<posOffTimerPoint<<endl;
+    cout << "Average time for short range: PMA with Dense Data (Boncz) = "<<pamTimerShort<<", PMA with Bitmap offset ="<<bitOffTimerShort<<", PMA with Position offset ="<<posOffTimerShort<<", PMA with non-zero offset ="<<nzOffTimerShort<<endl;
+    cout << "Average time for long range: PMA with Dense Data (Boncz) = "<<pamTimerLong<<", PMA with Bitmap offset ="<<bitOffTimerLong<<", PMA with Position offset ="<<posOffTimerLong<<", PMA with non-zero offset ="<<nzOffTimerLong<<endl;
+    cout << "Average time for point lookup: PMA with Dense Data (Boncz) = "<<pamTimerPoint<<", PMA with Bitmap offset ="<<bitOffTimerPoint<<", PMA with Position offset ="<<posOffTimerPoint<<", PMA with non-zero offset ="<<nzOffTimerPoint<<endl;
 
     ofstream myfile;
     myfile.open ("Compare_short_range.csv", ios::out | ios::app);
-    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",Boncz,"<<pamTimerShort<<",BitOffset,"<<bitOffTimerShort<<",PosOffst,"<<posOffTimerShort<<endl;
+    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",Boncz,"<<pamTimerShort<<",BitOffset,"<<bitOffTimerShort<<",PosOffst,"<<posOffTimerShort<<",NonZeroOffst,"<<nzOffTimerShort<<endl;
     myfile.close();
     myfile.open ("Compare_long_range.csv", ios::out | ios::app);
-    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",Boncz,"<<pamTimerLong<<",BitOffst,"<<bitOffTimerLong<<",PosOffst,"<<posOffTimerLong<<endl;
+    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",Boncz,"<<pamTimerLong<<",BitOffst,"<<bitOffTimerLong<<",PosOffst,"<<posOffTimerLong<<",NonZeroOffst,"<<nzOffTimerLong<<endl;
     myfile.close();
     myfile.open ("Compare_lookup.csv", ios::out | ios::app);
-    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",Boncz,"<<pamTimerPoint<<",BitOffst,"<<bitOffTimerPoint<<",PosOffst,"<<posOffTimerPoint<<endl;
+    myfile << "Element," << size<< ",Density,"<<density<<",Repeated,"<<Times<<",Boncz,"<<pamTimerPoint<<",BitOffst,"<<bitOffTimerPoint<<",PosOffst,"<<posOffTimerPoint<<",NonZeroOffst,"<<nzOffTimerPoint<<endl;
     myfile.close();
 
     delete[] data;  
     delete[] data2;
     delete[] index;
     delete[] NEOffset;
+    for(int i=0;i<65536; i++) delete[] NonZeroEntries[i];
     return 0;
 }
 
@@ -332,12 +361,13 @@ int64_t PMAWithNextElementOffset(int64_t *data, unsigned short *bitMap, int64_t 
     }
     if (high == 0) return data[mid]==low? low : 0;
 
-    int ushortSize = sizeof(unsigned short);
+    int ushortSize = sizeof(unsigned short) * 8;
     int64_t segNo = mid / ushortSize;
     unsigned short temp = bitMap[segNo];
-    int64_t base = segNo*ushortSize;
-    int64_t pBase = base;
+    int64_t base;
+    int64_t pBase = segNo*ushortSize;
     int64_t sum = 0;
+    int count = 0;
 
     //add elements from current segment
     bool flag = false;
@@ -345,7 +375,7 @@ int64_t PMAWithNextElementOffset(int64_t *data, unsigned short *bitMap, int64_t 
         base = pBase+offset;
         if(flag && data[base]> high) flag = false;
         else if(!flag && data[base] >= low) flag = true;
-        if(flag) sum += data[base];
+        if(flag) {count++; sum += data[base];}
     }
 
     //add elements from next segments
@@ -358,9 +388,79 @@ int64_t PMAWithNextElementOffset(int64_t *data, unsigned short *bitMap, int64_t 
             base = pBase + offset;
             if(data[base] > high) return sum;
             sum += data[base];
+            count++;
         }
     }
 
+    return sum;
+}
+
+int64_t PMAWithNonZeroEntries(int64_t *data, unsigned short *bitMap, int64_t end, int64_t low, int64_t high){
+    int64_t start = 0; end--;
+    int64_t mid;
+    while(start <= end){
+        mid = (start + end) / 2;
+        if(data[mid] == 0){
+            int64_t changedMid = mid, offset = -1;
+            while(changedMid > start){
+                changedMid += offset;
+                if(data[changedMid]!=0) break;
+            }
+            if(changedMid == start){
+                if(data[start] >= low) {mid = start; break;}
+                changedMid = mid;
+                offset = 1;
+                while(changedMid < end){
+                    changedMid += offset;
+                    if(data[changedMid]!=0) break;
+                }
+                if(changedMid == end){
+                    mid = end; break;
+                }else mid = changedMid;
+            }else mid = changedMid;
+
+        }
+        if(data[mid] == low) break;
+        else if(data[mid] < low) start = mid + 1;
+        else end = mid - 1;
+    }
+    while(data[mid]<low){
+        mid++;
+    }
+    if (high == 0) return data[mid]==low? low : 0;
+
+    int ushortSize = sizeof(unsigned short) * 8;
+    int64_t segNo = mid / ushortSize;
+    unsigned short temp = bitMap[segNo];
+    int64_t base;
+    int64_t pBase = segNo * ushortSize;
+    int64_t sum = 0;
+    int count = 0;
+
+    //add elements from current segment
+    bool flag = false;
+    for(int offset = 0; offset < NonZeroEntries[temp][0] ; ){
+        offset++;
+        base = pBase + NonZeroEntries[temp][offset];
+        if(flag && data[base]> high) flag = false;
+        else if(!flag && data[base] >= low) flag = true;
+        if(flag) {count++; sum += data[base];}
+    }
+
+    //add elements from next segments
+    while(true){
+        pBase += ushortSize;
+        //base = pBase;
+        segNo++;
+        temp = bitMap[segNo];
+        for(int offset = 0; offset < NonZeroEntries[temp][0]; ){
+            offset++;
+            base = pBase + NonZeroEntries[temp][offset];
+            if(data[base] > high) return sum;
+            sum += data[base];
+            count++;
+        }
+    }
     return sum;
 }
 
@@ -436,6 +536,50 @@ int64_t PMAWithDenseData(int64_t *data, int64_t end, record *segRecord, int64_t 
     return sum;
 }
 
+int64_t PMAWithDenseData2(int64_t *data, int64_t end, record *segRecord, int64_t segments, int64_t low, int64_t high){
+    int64_t segNo = 0, position = 0, segStart = 0, first = 0, last = segments - 1;
+    int64_t sum = 0;
+    while(first<=last){
+        segNo = (first + last)/2;
+        if(*segRecord[segNo].seg_start <= low && *(segRecord[segNo].seg_start+(segRecord[segNo].records-1)) >= low) break;
+        else if(*segRecord[segNo].seg_start > low) last = segNo - 1;
+        else first = segNo + 1;
+    }
+    //Do binary search later
+    segStart = segNo * DATASEGMENTSIZE;
+    first = 0, last = segRecord[segNo].records-1;
+    /*
+    while(first<=last){
+        position = (first+last)/2;
+        if(data[position + segStart] == low) break;
+        else if(data[position + segStart] > low) last = position - 1;
+        else first = position + 1;
+    }
+    */
+    for(int64_t i = 0; i < segRecord[segNo].records; i++){
+        if(data[i+segStart] >= low) {position = i; break;}
+    }
+    
+    if (high == 0) return data[segStart+position]==low? low : 0;
+
+    int64_t limit = segRecord[segNo].records - position + 1;
+    position += segStart;
+    //printf("initial limit: %ld\n",limit);
+    while(true){
+        while(limit>0){
+            if(data[position] > high) return sum;
+            sum+= data[position];
+            position++; limit--;
+        }
+        segNo++;
+        limit = segRecord[segNo].records;
+        position = segStart + DATASEGMENTSIZE;
+        segStart = position;
+    }
+    //cout << "finished with "<<sum<<endl;
+    return sum;
+}
+
 void create_next_element_offset(){
     for(int i = 0; i < 65536; i++){
         int j = 0, k = 1, l = 1, n = 1;
@@ -453,6 +597,23 @@ void create_next_element_offset(){
         }
         for(int m = j; m < n; m++){
             NextElementOffset[i][m] = l--;
+        }
+    }
+}
+
+void create_non_zero_entries(){
+    for(int i = 0; i<65536; i++){
+        int j = 0, k = 1, count = 0, idx = 0;
+        for(; j<16; j++){
+            if(i & k) count++;
+            k = k<<1;
+        }
+        NonZeroEntries[i] = new u_char[count+1];
+        NonZeroEntries[i][idx++] = (u_char)count;
+        k = 1;
+        for(j = 0; j<16; j++){
+            if(i & k) NonZeroEntries[i][idx++] = j;
+            k = k<<1;
         }
     }
 }
