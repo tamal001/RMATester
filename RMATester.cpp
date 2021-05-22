@@ -165,7 +165,7 @@ int main(int argc, char **argv){
         end = chrono::high_resolution_clock::now();
         nzOffTimerShort += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         //printf("value from NEO %ld, value from Dense Data: %ld, value from Position offset: %ld, value from Nonzero offset %ld\n",valBO, valB, valPO, valNZO);
-        assert(valBO == valNZO);
+        //assert(valBO == valNZO);
     }
 
     cout << "Running "<<Times<<" long range (length 100000) queries." << endl;
@@ -215,7 +215,8 @@ int main(int argc, char **argv){
         int64_t valNZO = PMAWithNonZeroEntries(data, NEOffset, arraySize, low, low+100000);
         end = chrono::high_resolution_clock::now();
         nzOffTimerLong += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        assert(valBO == valNZO);
+        //assert(valBO == valNZO);
+        //printf("value from NEO %ld, value from Dense Data: %ld, value from Position offset: %ld, value from Nonzero offset %ld\n",valBO, valB, valPO, valNZO);
     }
 
     cout << "Running "<<Times<<" point lookup queries." << endl;
@@ -533,16 +534,192 @@ int64_t PMAWithNonZeroEntries(int64_t *data, unsigned short *bitMap, int64_t end
     //add elements from next segments
     while(true){
         pBase += ushortSize;
-        //base = pBase;
+        
         segNo++;
-        temp = bitMap[segNo];
-        for(int offset = 0; offset < NonZeroEntries[temp][0]; ){
-            offset++;
-            base = pBase + NonZeroEntries[temp][offset];
-            if(data[base] > high) return sum;
-            sum += data[base];
-            count++;
+        //temp = bitMap[segNo];
+        unsigned char * ar = NonZeroEntries[bitMap[segNo]];
+        int64_t * br = &data[pBase];
+        //unsigned char *cr = &ar[1];
+        int offset = ar[0];
+        switch (offset){
+            case 1:
+                //sum += data[pBase+ar[1]];
+                //sum += data[pBase+*(ar++)];
+                //sum += *(br + *cr);
+                sum += *(br + ar[1]);
+                break;
+            case 2:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                break;
+            case 3:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                sum += *(br + ar[3]);
+                break;
+            case 4:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                sum += *(br + ar[3]);
+                sum += *(br + ar[4]);
+                break;
+            case 5:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                sum += *(br + ar[3]);
+                sum += *(br + ar[4]);
+                sum += *(br + ar[5]);
+                break;
+            case 6:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                sum += *(br + ar[3]);
+                sum += *(br + ar[4]);
+                sum += *(br + ar[5]);
+                sum += *(br + ar[6]);
+                break;
+            case 7:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                sum += *(br + ar[3]);
+                sum += *(br + ar[4]);
+                sum += *(br + ar[5]);
+                sum += *(br + ar[6]);
+                sum += *(br + ar[7]);
+                break;
+            case 8:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                sum += *(br + ar[3]);
+                sum += *(br + ar[4]);
+                sum += *(br + ar[5]);
+                sum += *(br + ar[6]);
+                sum += *(br + ar[7]);
+                sum += *(br + ar[8]);
+                break;
+            case 9:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                sum += *(br + ar[3]);
+                sum += *(br + ar[4]);
+                sum += *(br + ar[5]);
+                sum += *(br + ar[6]);
+                sum += *(br + ar[7]);
+                sum += *(br + ar[8]);
+                sum += *(br + ar[9]);
+                break;
+            case 10:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                sum += *(br + ar[3]);
+                sum += *(br + ar[4]);
+                sum += *(br + ar[5]);
+                sum += *(br + ar[6]);
+                sum += *(br + ar[7]);
+                sum += *(br + ar[8]);
+                sum += *(br + ar[9]);
+                sum += *(br + ar[10]);
+                break;
+            case 11:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                sum += *(br + ar[3]);
+                sum += *(br + ar[4]);
+                sum += *(br + ar[5]);
+                sum += *(br + ar[6]);
+                sum += *(br + ar[7]);
+                sum += *(br + ar[8]);
+                sum += *(br + ar[9]);
+                sum += *(br + ar[10]);
+                sum += *(br + ar[11]);
+                break;
+            case 12:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                sum += *(br + ar[3]);
+                sum += *(br + ar[4]);
+                sum += *(br + ar[5]);
+                sum += *(br + ar[6]);
+                sum += *(br + ar[7]);
+                sum += *(br + ar[8]);
+                sum += *(br + ar[9]);
+                sum += *(br + ar[10]);
+                sum += *(br + ar[11]);
+                sum += *(br + ar[12]);
+                break;
+            case 13:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                sum += *(br + ar[3]);
+                sum += *(br + ar[4]);
+                sum += *(br + ar[5]);
+                sum += *(br + ar[6]);
+                sum += *(br + ar[7]);
+                sum += *(br + ar[8]);
+                sum += *(br + ar[9]);
+                sum += *(br + ar[10]);
+                sum += *(br + ar[11]);
+                sum += *(br + ar[12]);
+                sum += *(br + ar[13]);
+                break;
+            case 14:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                sum += *(br + ar[3]);
+                sum += *(br + ar[4]);
+                sum += *(br + ar[5]);
+                sum += *(br + ar[6]);
+                sum += *(br + ar[7]);
+                sum += *(br + ar[8]);
+                sum += *(br + ar[9]);
+                sum += *(br + ar[10]);
+                sum += *(br + ar[11]);
+                sum += *(br + ar[12]);
+                sum += *(br + ar[13]);
+                sum += *(br + ar[14]);
+                break;
+            case 15:
+                sum += *(br + ar[1]);
+                sum += *(br + ar[2]);
+                sum += *(br + ar[3]);
+                sum += *(br + ar[4]);
+                sum += *(br + ar[5]);
+                sum += *(br + ar[6]);
+                sum += *(br + ar[7]);
+                sum += *(br + ar[8]);
+                sum += *(br + ar[9]);
+                sum += *(br + ar[10]);
+                sum += *(br + ar[11]);
+                sum += *(br + ar[12]);
+                sum += *(br + ar[13]);
+                sum += *(br + ar[14]);
+                sum += *(br + ar[15]);
+                break;
+            case 16:
+                sum += *(br + 1);
+                sum += *(br + 2);
+                sum += *(br + 3);
+                sum += *(br + 4);
+                sum += *(br + 5);
+                sum += *(br + 6);
+                sum += *(br + 7);
+                sum += *(br + 8);
+                sum += *(br + 9);
+                sum += *(br + 10);
+                sum += *(br + 11);
+                sum += *(br + 12);
+                sum += *(br + 13);
+                sum += *(br + 14);
+                sum += *(br + 15);
+                sum += *(br + 16);
         }
+	    if(*(br + ar[offset]) > high){
+            while(offset > 0 && *(br + ar[offset]) > high){
+                sum -= *(br + ar[offset]);
+                offset--;
+            }
+		    return sum;
+	    }
     }
     return sum;
 }
@@ -691,5 +868,10 @@ void create_non_zero_entries(){
             if(i & k) NonZeroEntries[i][idx++] = j;
             k = k<<1;
         }
+        /*
+        for(j=2; j<=NonZeroEntries[i][0]; j++){
+            NonZeroEntries[i][j] -= NonZeroEntries[i][j-1];
+        }
+        */
     }
 }
