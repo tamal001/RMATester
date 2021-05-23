@@ -5,9 +5,12 @@
 #include <unistd.h>
 #include <fstream>
 #include <cassert>
+#include <cmath>
 
 #define Times 100
 #define DATASEGMENTSIZE 512
+#define JacobsonIndexSize 16
+#define JacobsonIndexCount 65536 //2^JacobsonIndexSize
 
 using namespace std;
 
@@ -28,7 +31,8 @@ int64_t PMAWithNextElementOffset(int64_t *, unsigned short *, int64_t, int64_t, 
 int64_t PMAWithNonZeroEntries(int64_t *, unsigned short *, int64_t, int64_t, int64_t);
 
 unsigned short NextElementOffset[65536][16];
-u_char *NonZeroEntries[65536];
+u_int8_t NonZeroEntries[JacobsonIndexCount][JacobsonIndexSize+1];
+//unsigned char *NonZeroEntries[JacobsonIndexCount];
 
 int main(int argc, char **argv){
     int64_t *data;
@@ -165,7 +169,7 @@ int main(int argc, char **argv){
         end = chrono::high_resolution_clock::now();
         nzOffTimerShort += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         //printf("value from NEO %ld, value from Dense Data: %ld, value from Position offset: %ld, value from Nonzero offset %ld\n",valBO, valB, valPO, valNZO);
-        //assert(valBO == valNZO);
+        assert(valBO == valNZO);
     }
 
     cout << "Running "<<Times<<" long range (length 100000) queries." << endl;
@@ -215,7 +219,7 @@ int main(int argc, char **argv){
         int64_t valNZO = PMAWithNonZeroEntries(data, NEOffset, arraySize, low, low+100000);
         end = chrono::high_resolution_clock::now();
         nzOffTimerLong += chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        //assert(valBO == valNZO);
+        assert(valBO == valNZO);
         //printf("value from NEO %ld, value from Dense Data: %ld, value from Position offset: %ld, value from Nonzero offset %ld\n",valBO, valB, valPO, valNZO);
     }
 
@@ -282,7 +286,7 @@ int main(int argc, char **argv){
     delete[] data2;
     delete[] index;
     delete[] NEOffset;
-    for(int i=0;i<65536; i++) delete[] NonZeroEntries[i];
+    //for(int i=0;i<JacobsonIndexCount; i++) delete[] NonZeroEntries[i];
     return 0;
 }
 
@@ -508,9 +512,10 @@ int64_t PMAWithNonZeroEntries(int64_t *data, unsigned short *bitMap, int64_t end
         else if(data[mid] < low) start = mid + 1;
         else end = mid - 1;
     }
+    /*
     while(data[mid]<low){
         mid++;
-    }
+    }*/
     if (high == 0) return data[mid]==low? low : 0;
 
     int ushortSize = sizeof(unsigned short) * 8;
@@ -532,20 +537,20 @@ int64_t PMAWithNonZeroEntries(int64_t *data, unsigned short *bitMap, int64_t end
     }
 
     //add elements from next segments
+    //Reading two data block reduces time from 47800 to 47400
+    //Anything other data type except uchar, u_char, uint8_t, u_int8_t increases time
+    unsigned char * ar;
+    int64_t * br;
+    int offset;
     while(true){
         pBase += ushortSize;
-        
         segNo++;
-        //temp = bitMap[segNo];
-        unsigned char * ar = NonZeroEntries[bitMap[segNo]];
-        int64_t * br = &data[pBase];
+        ar = NonZeroEntries[bitMap[segNo]];
+        br = &data[pBase];
         //unsigned char *cr = &ar[1];
-        int offset = ar[0];
+        offset = ar[0];
         switch (offset){
             case 1:
-                //sum += data[pBase+ar[1]];
-                //sum += data[pBase+*(ar++)];
-                //sum += *(br + *cr);
                 sum += *(br + ar[1]);
                 break;
             case 2:
@@ -696,6 +701,25 @@ int64_t PMAWithNonZeroEntries(int64_t *data, unsigned short *bitMap, int64_t end
                 sum += *(br + ar[15]);
                 break;
             case 16:
+                sum += *br;
+                sum += *(br + 1);
+                sum += *(br + 2);
+                sum += *(br + 3);
+                sum += *(br + 4);
+                sum += *(br + 5);
+                sum += *(br + 6);
+                sum += *(br + 7);
+                sum += *(br + 8);
+                sum += *(br + 9);
+                sum += *(br + 10);
+                sum += *(br + 11);
+                sum += *(br + 12);
+                sum += *(br + 13);
+                sum += *(br + 14);
+                sum += *(br + 15);
+                /*
+                break;
+            case 17:
                 sum += *(br + 1);
                 sum += *(br + 2);
                 sum += *(br + 3);
@@ -712,6 +736,71 @@ int64_t PMAWithNonZeroEntries(int64_t *data, unsigned short *bitMap, int64_t end
                 sum += *(br + 14);
                 sum += *(br + 15);
                 sum += *(br + 16);
+                sum += *(br + 17);
+                break;
+            case 18:
+                sum += *(br + 1);
+                sum += *(br + 2);
+                sum += *(br + 3);
+                sum += *(br + 4);
+                sum += *(br + 5);
+                sum += *(br + 6);
+                sum += *(br + 7);
+                sum += *(br + 8);
+                sum += *(br + 9);
+                sum += *(br + 10);
+                sum += *(br + 11);
+                sum += *(br + 12);
+                sum += *(br + 13);
+                sum += *(br + 14);
+                sum += *(br + 15);
+                sum += *(br + 16);
+                sum += *(br + 17);
+                sum += *(br + 18);
+                break;
+            case 19:
+                sum += *(br + 1);
+                sum += *(br + 2);
+                sum += *(br + 3);
+                sum += *(br + 4);
+                sum += *(br + 5);
+                sum += *(br + 6);
+                sum += *(br + 7);
+                sum += *(br + 8);
+                sum += *(br + 9);
+                sum += *(br + 10);
+                sum += *(br + 11);
+                sum += *(br + 12);
+                sum += *(br + 13);
+                sum += *(br + 14);
+                sum += *(br + 15);
+                sum += *(br + 16);
+                sum += *(br + 17);
+                sum += *(br + 18);
+                sum += *(br + 19);
+                break;
+            case 20:
+                sum += *(br + 1);
+                sum += *(br + 2);
+                sum += *(br + 3);
+                sum += *(br + 4);
+                sum += *(br + 5);
+                sum += *(br + 6);
+                sum += *(br + 7);
+                sum += *(br + 8);
+                sum += *(br + 9);
+                sum += *(br + 10);
+                sum += *(br + 11);
+                sum += *(br + 12);
+                sum += *(br + 13);
+                sum += *(br + 14);
+                sum += *(br + 15);
+                sum += *(br + 16);
+                sum += *(br + 17);
+                sum += *(br + 18);
+                sum += *(br + 19);
+                sum += *(br + 20);
+                */
         }
 	    if(*(br + ar[offset]) > high){
             while(offset > 0 && *(br + ar[offset]) > high){
@@ -855,23 +944,19 @@ void create_next_element_offset(){
 }
 
 void create_non_zero_entries(){
-    for(int i = 0; i<65536; i++){
-        int j = 0, k = 1, count = 0, idx = 0;
-        for(; j<16; j++){
+    for(int i = 0; i<JacobsonIndexCount; i++){
+        int j, k = 1, idx = 0;
+        u_char count = 0;
+        for(j = 0; j<JacobsonIndexSize; j++){
             if(i & k) count++;
             k = k<<1;
         }
-        NonZeroEntries[i] = new u_char[count+1];
-        NonZeroEntries[i][idx++] = (u_char)count;
+        //NonZeroEntries[i] = new unsigned char [count+1];
+        NonZeroEntries[i][idx++] = count;
         k = 1;
-        for(j = 0; j<16; j++){
+        for(j = 0; j<JacobsonIndexSize; j++){
             if(i & k) NonZeroEntries[i][idx++] = j;
             k = k<<1;
         }
-        /*
-        for(j=2; j<=NonZeroEntries[i][0]; j++){
-            NonZeroEntries[i][j] -= NonZeroEntries[i][j-1];
-        }
-        */
     }
 }
